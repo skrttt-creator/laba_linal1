@@ -1,501 +1,268 @@
 #include <iostream>
 #include <vector>
+#include <cmath>
 #include <chrono>
-
 #include <random>
 #include <iomanip>
-#include <cmath>
-#include <algorithm>
 
 using namespace std;
+using namespace std::chrono;
 
-using namespace chrono;
+typedef vector<double> vec;
+typedef vector<vector<double>> mat;
 
-// типы для удобства
-using Matr = vector<vector<double>>;
-using Vec = vector<double>;
-
-void print_mat(const Matr& a) {
-    for (size_t i = 0; i < a.size(); i++) {
-        for (size_t j = 0; j < a[i].size(); j++) {
-            cout << setw(10) << setprecision(4) << a[i][j] << " ";
-        }
-        cout << endl;
-    }
+mat randommatix(int n, int seed = 42) {
+    mt19937 gen(seed);
+    uniform_real_distribution<> dis(-1.0, 1.0);
+    mat A(n, vec(n));
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            A[i][j] = dis(gen);
+    return A;
 }
 
-void print_vec(const Vec& v) {
-    for (double val : v) {
-        cout << setw(12) << setprecision(6) << val << " ";
-    }
-    cout << endl;
-}
-
-// генерация случ матрицы
-Matr rand_mat(int n, unsigned seed = 42) {
-    mt19937 rng(seed);
-    uniform_real_distribution<double> dist(-1.0, 1.0);
-    
-    Matr a(n, Vec(n));
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < n; ++j) {
-            a[i][j] = dist(rng);
-        }
-    }
-    return a;
-}
-
-// генерация правой части
-Vec rand_rhs(int n, unsigned seed = 123) {
-    mt19937 rng(seed);
-    uniform_real_distribution<double> dist(-1.0, 1.0);
-    
-    Vec b(n);
-    for (int i = 0; i < n; ++i) {
-        b[i] = dist(rng);
-    }
+vec randomvector(int n, int seed = 42 + 1) {
+    mt19937 gen(seed);
+    uniform_real_distribution<> dis(-1.0, 1.0);
+    vec b(n);
+    for (int i = 0; i < n; ++i)
+        b[i] = dis(gen);
     return b;
 }
 
-// матрица Гильберта
-Matr hilbert_mat(int n) {
-    Matr h(n, Vec(n));
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < n; ++j) {
-            h[i][j] = 1.0 / (i + j + 1);
-        }
-    }
-    return h;
+mat genhilbermatrix(int n) {
+    mat H(n, vec(n));
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            H[i][j] = 1.0 / (i + j + 1); 
+    return H;
 }
 
-// считаем невязку
-double norm_resid(const Matr& a, const Vec& x, const Vec& b) {
-    int n = a.size();
-    double max_err = 0.0;
-    for (int i = 0; i < n; ++i) {
-        double s = 0.0;
-        for (int j = 0; j < n; ++j) {
-            s += a[i][j] * x[j];
-        }
-        double err = fabs(s - b[i]);
-        if (err > max_err) max_err = err;
-    }
-    return max_err;
+vec matXvec(const mat& A, const vec& x) {
+    int n = A.size();
+    vec b(n, 0.0);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            b[i] += A[i][j] * x[j];
+    return b;
 }
 
-// копируем матрицу
-Matr copy_mat(const Matr& src) {
-    int n = src.size();
-    Matr dst(n, Vec(n));
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < n; ++j) {
-            dst[i][j] = src[i][j];
-        }
-    }
-    return dst;
+double vectorNorm(const vec& v) {
+    double sum = 0.0;
+    for (double val : v) sum += val * val;
+    return sqrt(sum);
 }
 
-//  метод гаусса без выбора 
+vec subtractVectors(const vec& a, const vec& b) {
+    vec res(a.size());
+    for (size_t i = 0; i < a.size(); ++i) res[i] = a[i] - b[i];
+    return res;
+}
 
-bool gauss1(Matr a, Vec b, Vec& x) {
-    int n = a.size();
-    x.assign(n, 0.0);
-    
-    // прямой ход
-    for (int k = 0; k < n; ++k) {
-        if (fabs(a[k][k]) < 1e-12) {
-            return false;
-        }
-        
+
+
+vec gaussNoPivoting(mat A, vec b) {
+    int n = A.size();
+    for (int k = 0; k < n - 1; ++k) {
         for (int i = k + 1; i < n; ++i) {
-            double m = a[i][k] / a[k][k];
+            double factor = A[i][k] / A[k][k];
             for (int j = k; j < n; ++j) {
-                a[i][j] -= m * a[k][j];
+                A[i][j] -= factor * A[k][j];
             }
-            b[i] -= m * b[k];
+            b[i] -= factor * b[k];
         }
     }
-    
-    // обратный ход
+    vec x(n);
     for (int i = n - 1; i >= 0; --i) {
         double sum = 0.0;
-        for (int j = i + 1; j < n; ++j) {
-            sum += a[i][j] * x[j];
-        }
-        x[i] = (b[i] - sum) / a[i][i];
-    }
-    return true;
-}
-
-// метод гаусса с выбором 
-
-bool gauss2(Matr a, Vec b, Vec& x) {
-    int n = a.size();
-    x.assign(n, 0.0);
-    
-    for (int k = 0; k < n; ++k) {
-        // ищем главный элемен
-        int best = k;
-        double best_val = fabs(a[k][k]);
-        for (int i = k + 1; i < n; ++i) {
-            if (fabs(a[i][k]) > best_val) {
-                best_val = fabs(a[i][k]);
-                best = i;
-            }
-        }
-        
-        if (best != k) {
-            swap(a[k], a[best]);
-            swap(b[k], b[best]);
-        }
-        
-        if (fabs(a[k][k]) < 1e-12) {
-            return false;
-        }
-        
-        for (int i = k + 1; i < n; ++i) {
-            double m = a[i][k] / a[k][k];
-            for (int j = k; j < n; ++j) {
-                a[i][j] -= m * a[k][j];
-            }
-            b[i] -= m * b[k];
-        }
-    }
-    
-    for (int i = n - 1; i >= 0; --i) {
-        double sum = 0.0;
-        for (int j = i + 1; j < n; ++j) {
-            sum += a[i][j] * x[j];
-        }
-        x[i] = (b[i] - sum) / a[i][i];
-    }
-    return true;
-}
-
-// lu разложение 
-
-bool lu_decomp(const Matr& a, Matr& l, Matr& u) {
-    int n = a.size();
-    l.assign(n, Vec(n, 0.0));
-    u.assign(n, Vec(n, 0.0));
-    
-    for (int i = 0; i < n; ++i) {
-        l[i][i] = 1.0;
-    }
-    
-    for (int i = 0; i < n; ++i) {
-        // считаем U[i][j]
-        for (int j = i; j < n; ++j) {
-            double s = 0.0;
-            for (int k = 0; k < i; ++k) {
-                s += l[i][k] * u[k][j];
-            }
-            u[i][j] = a[i][j] - s;
-        }
-        
-        // считаем L[j][i]
-        for (int j = i + 1; j < n; ++j) {
-            double s = 0.0;
-            for (int k = 0; k < i; ++k) {
-                s += l[j][k] * u[k][i];
-            }
-            if (fabs(u[i][i]) < 1e-12) {
-                return false;
-            }
-            l[j][i] = (a[j][i] - s) / u[i][i];
-        }
-    }
-    return true;
-}
-
-Vec forward_solve(const Matr& l, const Vec& b) {
-    int n = l.size();
-    Vec y(n, 0.0);
-    for (int i = 0; i < n; ++i) {
-        double s = 0.0;
-        for (int j = 0; j < i; ++j) {
-            s += l[i][j] * y[j];
-        }
-        y[i] = b[i] - s;
-    }
-    return y;
-}
-
-Vec back_solve(const Matr& u, const Vec& y) {
-    int n = u.size();
-    Vec x(n, 0.0);
-    for (int i = n - 1; i >= 0; --i) {
-        if (fabs(u[i][i]) < 1e-12) {
-            return Vec();
-        }
-        double s = 0.0;
-        for (int j = i + 1; j < n; ++j) {
-            s += u[i][j] * x[j];
-        }
-        x[i] = (y[i] - s) / u[i][i];
+        for (int j = i + 1; j < n; ++j) sum += A[i][j] * x[j];
+        x[i] = (b[i] - sum) / A[i][i];
     }
     return x;
 }
 
-bool solve_lu(const Matr& a, const Vec& b, Vec& x) {
-    Matr L, U;
-    if (!lu_decomp(a, L, U)) {
-        return false;
+vec gausswithpivot(mat A, vec b) {
+    int n = A.size();
+    for (int k = 0; k < n - 1; ++k) {
+        int maxRow = k;
+        double maxEl = abs(A[k][k]);
+        for (int i = k + 1; i < n; ++i) {
+            if (abs(A[i][k]) > maxEl) {
+                maxEl = abs(A[i][k]);
+                maxRow = i;
+            }
+        }
+        swap(A[k], A[maxRow]);
+        swap(b[k], b[maxRow]);
+        for (int i = k + 1; i < n; ++i) {
+            double factor = A[i][k] / A[k][k];
+            for (int j = k; j < n; ++j) {
+                A[i][j] -= factor * A[k][j];
+            }
+            b[i] -= factor * b[k];
+        }
     }
-    Vec y = forward_solve(L, b);
-    x = back_solve(U, y);
-    return true;
+    vec x(n);
+    for (int i = n - 1; i >= 0; --i) {
+        double sum = 0.0;
+        for (int j = i + 1; j < n; ++j) sum += A[i][j] * x[j];
+        x[i] = (b[i] - sum) / A[i][i];
+    }
+    return x;
 }
 
-bool solve_lu_multi(const Matr& a, const vector<Vec>& all_b, vector<Vec>& all_x) {
-    Matr L, U;
-    if (!lu_decomp(a, L, U)) {
-        return false;
+void LUdecomp(const mat& A, mat& L, mat& U) {
+    int n = A.size();
+    for (int i = 0; i < n; i++) {
+        for (int k = i; k < n; k++) {
+            double sum = 0.0;
+            for (int j = 0; j < i; j++) sum += (L[i][j] * U[j][k]);
+            U[i][k] = A[i][k] - sum;
+        }
+        for (int k = i; k < n; k++) {
+            if (i == k)
+                L[i][i] = 1.0; 
+            else {
+                double sum = 0.0;
+                for (int j = 0; j < i; j++) sum += (L[k][j] * U[j][i]);
+                L[k][i] = (A[k][i] - sum) / U[i][i];
+            }
+        }
+    }
+}
+
+vec slau(const mat& L, const mat& U, const vec& b) {
+    int n = L.size();
+    vec y(n), x(n);
+    for (int i = 0; i < n; ++i) {
+        double sum = 0.0;
+        for (int j = 0; j < i; ++j) sum += L[i][j] * y[j];
+        y[i] = b[i] - sum; 
     }
     
-    all_x.clear();
-    for (const auto& bb : all_b) {
-        Vec y = forward_solve(L, bb);
-        Vec xx = back_solve(U, y);
-        all_x.push_back(xx);
+    for (int i = n - 1; i >= 0; --i) {
+        double sum = 0.0;
+        for (int j = i + 1; j < n; ++j) sum += U[i][j] * x[j];
+        x[i] = (y[i] - sum) / U[i][i];
     }
-    return true;
+    return x;
 }
 
-// замер времени 
 
-template<typename F>
-double time_me(F&& f) {
-    auto start = high_resolution_clock::now();
-    f();
-    auto end = high_resolution_clock::now();
-    return duration_cast<microseconds>(end - start).count() / 1000.0;
-}
+//эксперементы
 
-// эксперимент 1 
-
-void exp1() {
-    cout << "\n" << string(80, '=') << endl;
-    cout << "эксперимент 1: время одной системы" << endl;
-    cout << string(80, '=') << endl;
-    
+//сравнение времени
+void experement1() {
+    cout << "\n сравнение времени решения одной системы: " << endl;
     vector<int> sizes = {100, 200, 500, 1000};
     
-    cout << left << setw(10) << "n"
-         << setw(20) << "Гаусс(без)"
-         << setw(20) << "Гаусс(с)"
-         << setw(20) << "LU разл"
-         << setw(20) << "LU подст"
-         << setw(20) << "LU всего" << endl;
-    cout << string(110, '-') << endl;
-    
+    cout << left << setw(10) << "Размер(n)" 
+         << setw(15) << "Гаусс(без)" 
+         << setw(15) << "Гаусс(с)" 
+         << setw(15) << "LU(общее)" 
+         << setw(15) << "LU(разл)" 
+         << setw(15) << "LU(подст)" << endl;
+
     for (int n : sizes) {
-        cout << "генерация " << n << "..." << endl;
+        mat A = randommatix(n);
+        vec b = randomvector(n);
         
-        Matr A = rand_mat(n, 42);
-        Vec b = rand_rhs(n, 123);
+        auto start = high_resolution_clock::now();
+        gaussNoPivoting(A, b);
+        auto end = high_resolution_clock::now();
+        double t_gauss_no = duration<double, milli>(end - start).count();
+
+        start = high_resolution_clock::now();
+        gausswithpivot(A, b);
+        end = high_resolution_clock::now();
+        double t_gauss_pivot = duration<double, milli>(end - start).count();
+
+        mat L(n, vec(n, 0.0)), U(n, vec(n, 0.0));
+        start = high_resolution_clock::now();
+        LUdecomp(A, L, U);
+        auto t_mid = high_resolution_clock::now();
+        slau(L, U, b);
+        end = high_resolution_clock::now();
         
-        double t1 = 0, t2 = 0, t_lu_fact = 0, t_lu_solve = 0, t_lu_tot = 0;
-        
-        // гаусс без выбора
-        {
-            Matr Ac = copy_mat(A);
-            Vec bc = b;
-            Vec x;
-            t1 = time_me([&]() { gauss1(Ac, bc, x); });
-        }
-        
-        // гаусс с выбором
-        {
-            Matr Ac = copy_mat(A);
-            Vec bc = b;
-            Vec x;
-            t2 = time_me([&]() { gauss2(Ac, bc, x); });
-        }
-        
-        // LU
-        {
-            Matr L, U;
-            t_lu_fact = time_me([&]() { lu_decomp(A, L, U); });
-            
-            t_lu_solve = time_me([&]() {
-                Matr L2, U2;
-                lu_decomp(A, L2, U2);
-                Vec y = forward_solve(L2, b);
-                Vec x = back_solve(U2, y);
-            });
-            
-            t_lu_tot = t_lu_fact + t_lu_solve;
-        }
-        
-        cout << left << setw(10) << n
-             << setw(20) << fixed << setprecision(4) << t1
-             << setw(20) << t2
-             << setw(20) << t_lu_fact
-             << setw(20) << t_lu_solve
-             << setw(20) << t_lu_tot << endl;
+        double t_lu_decomp = duration<double, milli>(t_mid - start).count();
+        double t_lu_solve = duration<double, milli>(end - t_mid).count();
+        double t_lu_total = t_lu_decomp + t_lu_solve;
+
+        cout << left << setw(10) << n 
+             << setw(15) << t_gauss_no 
+             << setw(15) << t_gauss_pivot 
+             << setw(15) << t_lu_total 
+             << setw(15) << t_lu_decomp 
+             << setw(15) << t_lu_solve << endl;
     }
 }
 
-// эксперимент 2 
+//экономия времени
+void experement2() {
+    cout << "\n экономия времени при множественных правых частях:" << endl;
+    int n = 500;
+    mat A = randommatix(n);
+    vector<int> k_values = {1, 10, 100};
+    
+    cout << "размер матрицы: " << n << "x" << n << endl;
+    cout << left << setw(10) << "Кол-во b(k)" << setw(20) << "Гаусс с выбором (мс)" << setw(20) << "LU-разложение (мс)" << endl;
 
-void exp2() {
-    cout << "\n" << string(80, '=') << endl;
-    cout << "ЭКСПЕРИМЕНТ 2: много правых частей (n=500)" << endl;
-    cout << string(80, '=') << endl;
-    
-    const int n = 500;
-    vector<int> ks = {1, 10, 100};
-    
-    cout << "генерация матрицы..." << endl;
-    Matr A = rand_mat(n, 42);
-    
-    cout << left << setw(15) << "k"
-         << setw(25) << "Гаусс (всего мс)"
-         << setw(25) << "LU (всего мс)"
-         << setw(20) << "ускорение" << endl;
-    cout << string(85, '-') << endl;
-    
-    for (int k : ks) {
-        vector<Vec> all_b;
+    for (int k : k_values) {
+        vector<vec> B;
+        for (int i = 0; i < k; ++i) B.push_back(randomvector(n, i));
+
+        auto start = high_resolution_clock::now();
         for (int i = 0; i < k; ++i) {
-            all_b.push_back(rand_rhs(n, 123 + i));
+            gausswithpivot(A, B[i]);
         }
-        
-        double tg = time_me([&]() {
-            for (int i = 0; i < k; ++i) {
-                Matr Ac = copy_mat(A);
-                Vec bc = all_b[i];
-                Vec x;
-                gauss2(Ac, bc, x);
-            }
-        });
-        
-        double tlu = time_me([&]() {
-            vector<Vec> xx;
-            solve_lu_multi(A, all_b, xx);
-        });
-        
-        double sp = tg / tlu;
-        
-        cout << left << setw(15) << k
-             << setw(25) << fixed << setprecision(4) << tg
-             << setw(25) << tlu
-             << setw(20) << setprecision(2) << sp << "x" << endl;
+        auto end = high_resolution_clock::now();
+        double t_gauss = duration<double, milli>(end - start).count();
+
+        mat L(n, vec(n, 0.0)), U(n, vec(n, 0.0));
+        start = high_resolution_clock::now();
+        LUdecomp(A, L, U);
+        for (int i = 0; i < k; ++i) {
+            slau(L, U, B[i]);
+        }
+        end = high_resolution_clock::now();
+        double t_lu = duration<double, milli>(end - start).count();
+
+        cout << left << setw(10) << k << setw(20) << t_gauss << setw(20) << t_lu << endl;
     }
 }
-
-// эксперимент 3 
-
-void exp3() {
-    cout << "\n" << string(80, '=') << endl;
-    cout << "ЭКСПЕРИМЕНТ 3: точность (матрица Гильберта)" << endl;
-    cout << string(80, '=') << endl;
-    
+//проверка точности
+void experement3() {
+    cout << "\n проверка точности на плохо обусловленных матрицах:" << endl;
     vector<int> sizes = {5, 10, 15};
     
-    cout << left << setw(10) << "n"
-         << setw(25) << "Гаусс(без)"
-         << setw(25) << "Гаусс(с)"
-         << setw(25) << "LU" << endl;
-    cout << string(85, '-') << endl;
-    
     for (int n : sizes) {
-        Matr H = hilbert_mat(n);
-        Vec exact(n, 1.0);
-        
-        Vec b(n, 0.0);
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j < n; ++j) {
-                b[i] += H[i][j] * exact[j];
-            }
-        }
-        
-        double r1 = -1, r2 = -1, r3 = -1;
-        
-        {
-            Matr Hc = copy_mat(H);
-            Vec bc = b;
-            Vec x;
-            if (gauss1(Hc, bc, x)) r1 = norm_resid(H, x, b);
-        }
-        
-        {
-            Matr Hc = copy_mat(H);
-            Vec bc = b;
-            Vec x;
-            if (gauss2(Hc, bc, x)) r2 = norm_resid(H, x, b);
-        }
-        
-        {
-            Vec x;
-            if (solve_lu(H, b, x)) r3 = norm_resid(H, x, b);
-        }
-        
-        cout << left << setw(10) << n;
-        
-        if (r1 < 0) cout << setw(25) << "провал";
-        else cout << setw(25) << scientific << setprecision(4) << r1;
-        
-        if (r2 < 0) cout << setw(25) << "провал";
-        else cout << setw(25) << scientific << setprecision(4) << r2;
-        
-        if (r3 < 0) cout << setw(25) << "провал";
-        else cout << setw(25) << scientific << setprecision(4) << r3;
-        
-        cout << endl;
+        cout << "\n матрица Гильберта размерности n = " << n << endl;
+        mat H = genhilbermatrix(n);
+        vec exact_x(n, 1.0);
+        vec b = matXvec(H, exact_x);
+
+        double norm_exact_x = vectorNorm(exact_x);
+
+        vec x_no = gaussNoPivoting(H, b);
+        double err_no = vectorNorm(subtractVectors(x_no, exact_x)) / norm_exact_x;
+        double res_no = vectorNorm(subtractVectors(matXvec(H, x_no), b));
+
+        vec x_piv = gausswithpivot(H, b);
+        double err_piv = vectorNorm(subtractVectors(x_piv, exact_x)) / norm_exact_x;
+        double res_piv = vectorNorm(subtractVectors(matXvec(H, x_piv), b));
+
+        cout << "Метод                   | Относит. погрешность | Невязка" << endl;
+        cout << "Гаусс (без выбора)      | " << scientific << err_no << "         | " << res_no << endl;
+        cout << "Гаусс (с выбором)       | " << err_piv << "         | " << res_piv << endl;
     }
 }
-
-// ========================== эксперимент 4 ==========================
-
-void exp4() {
-    cout << "\n" << string(80, '=') << endl;
-    cout << "эксперимент 4: масштабирование" << endl;
-    cout << string(80, '=') << endl;
-    
-    vector<int> sizes = {50, 100, 200, 400, 600, 800, 1000};
-    
-    cout << left << setw(10) << "n"
-         << setw(20) << "время (мс)"
-         << setw(25) << "теор. O(n^3)" << endl;
-    cout << string(55, '-') << endl;
-    
-    double base_t = 0;
-    int base_n = 50;
-    
-    for (int n : sizes) {
-        Matr A = rand_mat(n, 42);
-        Vec b = rand_rhs(n, 123);
-        
-        double tt = time_me([&]() {
-            Matr Ac = copy_mat(A);
-            Vec bc = b;
-            Vec x;
-            gauss2(Ac, bc, x);
-        });
-        
-        if (n == base_n) base_t = tt;
-        
-        double theo = base_t * pow(double(n) / base_n, 3.0);
-        
-        cout << left << setw(10) << n
-             << setw(20) << fixed << setprecision(4) << tt
-             << setw(25) << setprecision(1) << theo << endl;
-    }
-}
-
-// ========================== main ==========================
 
 int main() {
-    cout << "ЛАБОРАТОРНАЯ РАБОТА: Сравнение методов решения СЛАУ" << endl;
-    exp1();
-    exp2();
-    exp3();
-    exp4();
-    cout << "\n" << string(80, '=') << endl;
-    cout << "готово" << endl;
-    cout << string(80, '=') << endl;
+    cout << "таблицы эксперементов:" << endl;
     
+    experement1();
+    experement2();
+    experement3();
+
     return 0;
 }
