@@ -58,11 +58,11 @@
 ```bash
 
 
-vector<int> sizes = {100, 200, 500, 1000}; в функции exp1()
+vector<int> sizes = {100, 200, 500, 1000}; в функции experemen1()
 
-const int n = 500; и vector<int> ks = {1, 10, 100}; в функции exp2()
+const int n = 500; и vector<int> ks = {1, 10, 100}; в функции experement2()
 
-vector<int> sizes = {5, 10, 15}; в функции exp3()
+vector<int> sizes = {5, 10, 15}; в функции experement3()
 ```
 
 Тип генерируемых матриц
