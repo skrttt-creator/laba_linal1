@@ -19,7 +19,7 @@ public:
     // конструктор 
     DynamicArray() : data(nullptr), current_size(0), current_capacity(0) {}
 
-    // конструктор с заданным размером (заполняет 0)
+    // конструктор размер 0
     DynamicArray(size_t n) : current_size(n), current_capacity(n) {
         data = new T[n](); 
     }
@@ -32,7 +32,7 @@ public:
         }
     }
 
-    // конструктор копирования
+    // копирование
     DynamicArray(const DynamicArray& other) : current_size(other.current_size), current_capacity(other.current_capacity) {
         if (other.current_capacity > 0) {
             data = new T[other.current_capacity];
@@ -44,7 +44,7 @@ public:
         }
     }
 
-    // оператор присваивания
+    // присваивания
     DynamicArray& operator=(const DynamicArray& other) {
         if (this != &other) {
             delete[] data;
@@ -67,7 +67,7 @@ public:
         other.current_size = 0;
         other.current_capacity = 0;
     }
-
+// перемещение
     DynamicArray& operator=(DynamicArray&& other) noexcept {
         if (this != &other) {
             delete[] data;
@@ -82,17 +82,17 @@ public:
         return *this;
     }
 
-
+//деструктор
     ~DynamicArray() {
         delete[] data;
     }
 
-
+    // операторы доступа
     T& operator[](size_t index) { return data[index]; }
     const T& operator[](size_t index) const { return data[index]; }
 
     size_t size() const { return current_size; }
-
+//добав элемент
     void push_back(const T& val) {
         if (current_size == current_capacity) {
             current_capacity = (current_capacity == 0) ? 1 : current_capacity * 2;
@@ -105,7 +105,7 @@ public:
         }
         data[current_size++] = val;
     }
-
+//итераторы для работы с циклами
     T* begin() { return data; }
     T* end() { return data + current_size; }
     const T* begin() const { return data; }
